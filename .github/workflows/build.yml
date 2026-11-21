@@ -1,13 +1,23 @@
 name: Build
 
 # Builds the app on every push to main and on every version tag (v1.2.3).
-# The build mirrors F-Droid's recipe (fdroid/io.kammarc.gltfviewer.yml):
+# The build job mirrors F-Droid's recipe (fdroid/io.kammarc.gltfviewer.yml):
 # same Flutter version, unsigned release APK - so a green run here is a
 # good sign F-Droid's build server will succeed too.
+#
+# On a version tag, the release job additionally builds a *signed* APK
+# (with the keystore from the repository secrets) and publishes it as a
+# GitHub Release. It can also be started by hand (Actions > Build > Run
+# workflow) for an existing tag.
 on:
   push:
     branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release, e.g. v1.0.0"
+        required: true
 
 permissions:
   contents: read
@@ -23,6 +33,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -76,3 +87,84 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
+
+  release:
+    # After a successful tag build, or on its own when started by hand.
+    needs: build
+    if: >-
+      !failure() && !cancelled() &&
+      (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # to create the GitHub Release
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # Recreates the keystore and android/key.properties from secrets, so
+      # build.gradle.kts signs the release build. Neither ever lands in the
+      # repo; both live only in this run's temporary directory.
+      - name: Set up signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Signing secrets are missing. Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/upload.jks"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          {
+            echo "storeFile=$keystore"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > android/key.properties
+
+      - name: Build signed release APK
+        run: |
+          flutter pub get
+          flutter build apk --release
+          mv build/app/outputs/flutter-apk/app-release.apk "gltf-viewer-$TAG.apk"
+
+      # Release notes come from the fastlane changelog for this versionCode
+      # (the number after "+" in pubspec.yaml) - the same text F-Droid shows.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version_code="$(sed -n 's/^version:[^+]*+\([0-9]*\).*/\1/p' pubspec.yaml)"
+          notes="fastlane/metadata/android/en-US/changelogs/$version_code.txt"
+          if [ -f "$notes" ]; then
+            notes_args=(--notes-file "$notes")
+          else
+            notes_args=(--generate-notes)
+          fi
+          gh release create "$TAG" "gltf-viewer-$TAG.apk" \
+            --title "GLTF Viewer ${TAG#v}" --verify-tag "${notes_args[@]}"
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks" android/key.properties
