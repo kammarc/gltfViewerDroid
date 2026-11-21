@@ -1,0 +1,32 @@
+GLTF Viewer is a simple, offline viewer for 3D models in the glTF format (.glb and .gltf).
+
+<b>Opening models</b>
+<ul>
+<li>Choose a folder, and all .glb/.gltf files in it are listed on the home screen</li>
+<li>Or open any single file directly</li>
+</ul>
+
+<b>3D view</b>
+<ul>
+<li>Drag to orbit, pinch to zoom; parts are drawn with outlines</li>
+<li>Tap a part to select it and see its name and X/Y/Z dimensions; tapered parts also show their short edge</li>
+<li>Long-press to list every part under your finger, including hidden ones</li>
+<li>Make selected parts see-through to look inside the model</li>
+<li>Switch to a camera stored in the file to see the model exactly as it was framed</li>
+</ul>
+
+<b>Cut list</b>
+<ul>
+<li>All parts grouped by size, with quantity and hole diameters, handy for woodworking projects</li>
+<li>Tap an entry to highlight its parts; check entries off as you go (progress is saved per model)</li>
+</ul>
+
+<b>General</b>
+<ul>
+<li>Light, dark and two pastel themes</li>
+<li>English and German</li>
+</ul>
+
+Note: measurements are shown in millimeters, and the app treats 1 glTF unit as 1 mm.
+
+No ads, no tracking, and no internet access. The INTERNET permission is used only for a loopback (127.0.0.1) server inside the app that hands your model to the built-in 3D view.

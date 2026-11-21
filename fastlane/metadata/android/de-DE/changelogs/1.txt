@@ -1,0 +1,1 @@
+Erste Version: Ordner durchsuchen oder einzelne .glb-/.gltf-Dateien öffnen, 3D-Ansicht mit Umrisslinien, Bauteile antippen mit Maßen, durchsichtige Teile, eingebettete Kameras, Zuschnittliste mit Fortschritt, Designs, Deutsch und Englisch.

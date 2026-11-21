@@ -1,0 +1,32 @@
+GLTF-Betrachter ist ein einfacher Offline-Betrachter für 3D-Modelle im glTF-Format (.glb und .gltf).
+
+<b>Modelle öffnen</b>
+<ul>
+<li>Ordner wählen: alle .glb-/.gltf-Dateien darin werden auf der Startseite aufgelistet</li>
+<li>Oder eine einzelne Datei direkt öffnen</li>
+</ul>
+
+<b>3D-Ansicht</b>
+<ul>
+<li>Ziehen zum Drehen, zwei Finger zum Zoomen; Bauteile werden mit Umrisslinien dargestellt</li>
+<li>Bauteil antippen, um es auszuwählen und Name sowie X/Y/Z-Maße zu sehen; bei schrägen Teilen wird auch die kurze Kante angezeigt</li>
+<li>Lange drücken, um alle Teile unter dem Finger aufzulisten, auch verdeckte</li>
+<li>Ausgewählte Teile durchsichtig schalten, um ins Modell zu schauen</li>
+<li>Zu einer in der Datei gespeicherten Kamera wechseln, um das Modell genau wie im 3D-Programm zu sehen</li>
+</ul>
+
+<b>Zuschnittliste</b>
+<ul>
+<li>Alle Teile nach Größe gruppiert, mit Stückzahl und Bohrungsdurchmessern, praktisch für Holzprojekte</li>
+<li>Eintrag antippen, um die Teile hervorzuheben; erledigte Einträge abhaken (der Fortschritt wird pro Modell gespeichert)</li>
+</ul>
+
+<b>Allgemein</b>
+<ul>
+<li>Helles, dunkles und zwei Pastell-Designs</li>
+<li>Deutsch und Englisch</li>
+</ul>
+
+Hinweis: Maße werden in Millimetern angezeigt, die App behandelt 1 glTF-Einheit als 1 mm.
+
+Keine Werbung, kein Tracking und kein Internetzugriff. Die Berechtigung INTERNET wird nur für einen internen Loopback-Server (127.0.0.1) benötigt, der das Modell an die eingebaute 3D-Ansicht übergibt.

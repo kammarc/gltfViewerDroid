@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The WebView loads the picked model from a loopback-only HTTP server
+  (see lib/viewer/local_model_server.dart), which is plain http://. Android
+  blocks cleartext traffic by default, so it's explicitly allowed here for
+  the loopback addresses only — not for the internet at large.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

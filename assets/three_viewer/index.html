@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <!--
+      Content-Security-Policy: the viewer only ever loads its own bundled
+      scripts and the model it was handed (a loopback URL on Android, a
+      blob: URL on web). Blocking every other origin keeps a crafted model
+      (e.g. a .gltf referencing remote textures) from making the app phone
+      home. The sha256 is the inline import map below - update it if that
+      block changes (hash its contents with LF line endings).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'sha256-SoYdL8Abref5dJ/W+hgMjydt6PWGEc0GFHALj16U/Sw='; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self' blob: data:; base-uri 'none'; form-action 'none'; object-src 'none'"
+    />
+    <title>GLTF Viewer</title>
+    <style>
+      /* Four themes: plain dark (default) and plain light, plus a dark and
+         a light pastel variant - matching the app's own Settings screen.
+         Swapped by viewer.js setting data-theme on <html> to one of "light",
+         "dark-pastel", "light-pastel" (plain dark needs no attribute at
+         all, since it's what :root already is) from the `theme` URL param
+         the app passes in. Functional accent colours (selection, dimension/
+         angle/marked, hole, qty) are also theme-driven - vivid in the two
+         plain themes, a warm pastel family sharing hues across "selected"
+         and "done" in the two pastel ones - see the [data-theme$="pastel"]
+         block below. Error red is left alone in every theme; it's read as
+         a warning regardless of aesthetic. */
+      :root {
+        --bg: #1b1b1f;
+        --fg: #ffffff;
+        --fg-dim: rgba(255, 255, 255, 0.55);
+        --fg-faint: rgba(255, 255, 255, 0.35);
+        --surface: rgba(30, 30, 34, 0.85);
+        --surface-strong: rgba(24, 24, 28, 0.97);
+        --surface-active: rgba(60, 60, 66, 0.9);
+        --row-hover: rgba(255, 255, 255, 0.08);
+        --border: rgba(255, 255, 255, 0.25);
+        --border-soft: rgba(255, 255, 255, 0.1);
+        --shadow: rgba(0, 0, 0, 0.45);
+        --control-bg: rgba(255, 255, 255, 0.08);
+        --control-border: rgba(255, 255, 255, 0.35);
+
+        --accent-selected: #2ecc55;
+        --accent-selected-bg: rgba(46, 204, 85, 0.14);
+        --accent-angle: #ffd166;
+        --accent-hole: #2ecc55;
+        --accent-qty-bg: #6cb4ee;
+        --accent-qty-fg: #14201a;
+        --accent-marked: #ffd166;
+        --accent-done: #2ecc55;
+      }
+      html[data-theme="light"] {
+        --bg: #f2f2f5;
+        --fg: #1b1b1f;
+        --fg-dim: rgba(0, 0, 0, 0.6);
+        --fg-faint: rgba(0, 0, 0, 0.4);
+        --surface: rgba(255, 255, 255, 0.9);
+        --surface-strong: rgba(255, 255, 255, 0.98);
+        --surface-active: rgba(225, 225, 230, 0.95);
+        --row-hover: rgba(0, 0, 0, 0.06);
+        --border: rgba(0, 0, 0, 0.18);
+        --border-soft: rgba(0, 0, 0, 0.1);
+        --shadow: rgba(0, 0, 0, 0.18);
+        --control-bg: rgba(0, 0, 0, 0.05);
+        --control-border: rgba(0, 0, 0, 0.3);
+      }
+      html[data-theme="dark-pastel"] {
+        --bg: #241f2e;
+        --fg: #ede7f5;
+        --fg-dim: rgba(237, 231, 245, 0.6);
+        --fg-faint: rgba(237, 231, 245, 0.38);
+        --surface: rgba(54, 47, 69, 0.85);
+        --surface-strong: rgba(44, 38, 56, 0.97);
+        --surface-active: rgba(74, 64, 94, 0.9);
+        --row-hover: rgba(237, 231, 245, 0.08);
+        --border: rgba(237, 231, 245, 0.22);
+        --border-soft: rgba(237, 231, 245, 0.1);
+        --shadow: rgba(0, 0, 0, 0.45);
+        --control-bg: rgba(237, 231, 245, 0.08);
+        --control-border: rgba(237, 231, 245, 0.32);
+      }
+      html[data-theme="light-pastel"] {
+        --bg: #faf6fb;
+        --fg: #3a3342;
+        --fg-dim: rgba(58, 51, 66, 0.62);
+        --fg-faint: rgba(58, 51, 66, 0.4);
+        --surface: rgba(255, 255, 255, 0.9);
+        --surface-strong: rgba(255, 255, 255, 0.98);
+        --surface-active: rgba(241, 233, 247, 0.95);
+        --row-hover: rgba(58, 51, 66, 0.06);
+        --border: rgba(58, 51, 66, 0.16);
+        --border-soft: rgba(58, 51, 66, 0.1);
+        --shadow: rgba(58, 51, 66, 0.18);
+        --control-bg: rgba(58, 51, 66, 0.05);
+        --control-border: rgba(58, 51, 66, 0.28);
+      }
+      /* Both pastel themes share one warm accent family - coral for
+         selection/"done", golden mustard for angle/"marked", terracotta for
+         drilled holes, dusty peach for the quantity badge - regardless of
+         whether the background itself is light or dark. */
+      html[data-theme$="pastel"] {
+        --accent-selected: #e8927c;
+        --accent-selected-bg: rgba(232, 146, 124, 0.18);
+        --accent-angle: #e8b84b;
+        --accent-hole: #cc7a54;
+        --accent-qty-bg: #e8c4a0;
+        --accent-qty-fg: #3a2418;
+        --accent-marked: #e8b84b;
+        --accent-done: #e8927c;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      canvas {
+        display: block;
+        outline: none;
+      }
+      #status {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: var(--fg);
+        font-family: sans-serif;
+        font-size: 14px;
+        text-align: center;
+        max-width: 80vw;
+        pointer-events: none;
+      }
+      #labels {
+        position: absolute;
+        top: 0;
+        left: 0;
+        /* Sized to the rendered image, which for a letterboxed glTF camera
+           view is smaller than the canvas — clip so labels of parts outside
+           that camera's frame don't spill onto the letterbox bars. */
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .dim-label {
+        color: var(--accent-angle);
+        font-family: sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 2px 6px;
+        border-radius: 4px;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      /* The selected part's name, pinned to its centre - bigger and in the
+         selection colour so it reads as "what this is" rather than another
+         measurement. */
+      .name-label {
+        color: var(--accent-selected);
+        font-family: sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 4px 10px;
+        border-radius: 6px;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+      #viewer-controls-left,
+      #viewer-controls-right {
+        position: fixed;
+        bottom: 16px;
+        z-index: 10;
+        display: flex;
+        gap: 10px;
+        pointer-events: none;
+      }
+      #viewer-controls-left {
+        left: 16px;
+      }
+      #viewer-controls-right {
+        right: 16px;
+      }
+      .icon-button {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        color: var(--fg);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 50%;
+        padding: 0;
+        pointer-events: auto;
+      }
+      .icon-button.visible {
+        display: flex;
+      }
+      .icon-button:active {
+        background: var(--surface-active);
+      }
+      .icon-button.active {
+        color: #1b1b1f;
+        background: #ffd166;
+        border-color: #ffd166;
+      }
+      .icon-button svg {
+        width: 20px;
+        height: 20px;
+      }
+      .icon-button.small {
+        width: 32px;
+        height: 32px;
+      }
+      .icon-button.small svg {
+        width: 16px;
+        height: 16px;
+      }
+      /* The long-press hit list: every part the ray passed through, so a
+         part buried inside another one can still be picked. */
+      #pick-list {
+        position: fixed;
+        z-index: 20;
+        display: none;
+        flex-direction: column;
+        min-width: 180px;
+        max-width: min(280px, 80vw);
+        max-height: 50vh;
+        overflow-y: auto;
+        padding: 6px;
+        color: var(--fg);
+        font-family: sans-serif;
+        background: var(--surface-strong);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 6px 20px var(--shadow);
+      }
+      #pick-list.visible {
+        display: flex;
+      }
+      .pick-list-title {
+        padding: 4px 8px 6px;
+        color: var(--fg-dim);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .pick-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        padding: 9px 8px;
+        color: inherit;
+        font-family: inherit;
+        font-size: 13px;
+        text-align: left;
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .pick-item:active {
+        background: var(--row-hover);
+      }
+      .pick-item.active {
+        color: var(--accent-selected);
+      }
+      .pick-item-name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .pick-item-depth {
+        flex: none;
+        color: var(--fg-dim);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      /* The cut list: every part grouped by cut size, with a checkbox to
+         mark a batch cut, sitting low enough that the 3D view (and whatever
+         it's showing from a tapped row) stays visible above it. */
+      #cut-list-panel {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 25;
+        display: flex;
+        flex-direction: column;
+        max-height: 58vh;
+        background: var(--surface-strong);
+        border-top: 1px solid var(--border-soft);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -6px 24px var(--shadow);
+        transform: translateY(100%);
+        transition: transform 0.2s ease;
+        pointer-events: none;
+      }
+      #cut-list-panel.visible {
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      /* On a large-enough landscape display (a tablet, held wide) there's
+         room for the cut list beside the model instead of on top of a big
+         chunk of it: a side panel sliding in from the right instead of a
+         sheet from the bottom, so both stay comfortably visible together.
+         viewer.js's fitModelAboveCutList mirrors this exact query so its
+         own reframing math knows which edge is actually in use. */
+      @media (min-width: 900px) and (orientation: landscape) {
+        #cut-list-panel {
+          left: auto;
+          top: 0;
+          bottom: 0;
+          width: min(420px, 40vw);
+          max-height: none;
+          border-top: none;
+          border-left: 1px solid var(--border-soft);
+          border-radius: 16px 0 0 16px;
+          box-shadow: -6px 0 24px var(--shadow);
+          transform: translateX(100%);
+        }
+        #cut-list-panel.visible {
+          transform: translateX(0);
+        }
+      }
+      .cutlist-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 10px 12px 16px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .cutlist-title {
+        color: var(--fg);
+        font-family: sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .cutlist-progress {
+        margin-top: 2px;
+        color: var(--fg-dim);
+        font-family: sans-serif;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .cutlist-items {
+        overflow-y: auto;
+        padding: 4px 8px 14px;
+      }
+      .cutlist-empty {
+        padding: 20px 12px;
+        color: var(--fg-dim);
+        font-family: sans-serif;
+        font-size: 13px;
+        text-align: center;
+      }
+      .cutlist-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 8px;
+        border-radius: 8px;
+      }
+      .cutlist-row:active {
+        background: var(--row-hover);
+      }
+      /* Whichever row's part is currently selected - from a tap in the 3D
+         view, the long-press list, or this row itself - so the two views
+         always agree on what's selected. */
+      .cutlist-row.selected {
+        background: var(--accent-selected-bg);
+        box-shadow: inset 3px 0 0 var(--accent-selected);
+      }
+      .cutlist-row.cut .cutlist-size,
+      .cutlist-row.cut .cutlist-names {
+        color: var(--fg-faint);
+        text-decoration: line-through;
+      }
+      .cutlist-thumb {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 6px;
+        background: var(--control-bg);
+        object-fit: contain;
+      }
+      .cutlist-row.cut .cutlist-thumb {
+        opacity: 0.4;
+      }
+      /* A fully custom checkbox rather than the platform's native control -
+         appearance:none alone still leaves some WebViews drawing their own
+         3D-bevelled box underneath, so the whole look (box, check mark) is
+         drawn here instead of relying on any native rendering. */
+      .cutlist-check {
+        appearance: none;
+        -webkit-appearance: none;
+        flex: none;
+        width: 22px;
+        height: 22px;
+        margin: 0;
+        position: relative;
+        background: var(--control-bg);
+        border: 1.5px solid var(--control-border);
+        border-radius: 5px;
+      }
+      /* Two checked states, not one: a tap flags a part yellow ("cut this
+         next"), a second tap turns that yellow into green ("actually cut"),
+         a third clears it - see nextCutState() in viewer.js. */
+      .cutlist-check.marked {
+        background: var(--accent-marked);
+        border-color: var(--accent-marked);
+      }
+      .cutlist-check.done {
+        background: var(--accent-done);
+        border-color: var(--accent-done);
+      }
+      .cutlist-check.marked::after,
+      .cutlist-check.done::after {
+        content: "";
+        position: absolute;
+        left: 7px;
+        top: 3px;
+        width: 5px;
+        height: 10px;
+        border: solid #14201a;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+      }
+      .cutlist-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .cutlist-size {
+        overflow: hidden;
+        color: var(--fg);
+        font-family: sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      /* The saw/bevel angle a non-square face needs - an accent chip like
+         the yellow dimension labels in the 3D view, so it reads as "a
+         measurement" rather than part of the part's name. Dark-on-yellow
+         regardless of theme, same as .icon-button.active. */
+      .cutlist-angle {
+        display: inline-block;
+        padding: 1px 6px;
+        color: #1b1b1f;
+        background: var(--accent-angle);
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        vertical-align: middle;
+      }
+      .cutlist-row.cut .cutlist-angle {
+        opacity: 0.5;
+      }
+      /* A round hole to drill - green rather than the angle badge's yellow,
+         so the two read as different kinds of information at a glance. */
+      .cutlist-hole {
+        display: inline-block;
+        padding: 1px 6px;
+        color: #ffffff;
+        background: var(--accent-hole);
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        vertical-align: middle;
+      }
+      .cutlist-row.cut .cutlist-hole {
+        opacity: 0.5;
+      }
+      .cutlist-names {
+        overflow: hidden;
+        color: var(--fg-dim);
+        font-family: sans-serif;
+        font-size: 11px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      /* Same circular-badge look as the icon buttons (var(--surface) fill,
+         var(--border) outline) rather than a one-off colour, so it reads as
+         part of the same visual language instead of a fourth accent colour
+         competing with the angle (yellow) and hole (green) chips. Hidden by
+         default and only shown for an actual multi-instance group - see
+         .cutlist-qty.visible, matching the .icon-button.visible pattern. */
+      .cutlist-qty {
+        display: none;
+        flex: none;
+        width: 22px;
+        height: 22px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: var(--accent-qty-bg);
+        border: 1px solid var(--accent-qty-bg);
+        color: var(--accent-qty-fg);
+        font-family: sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .cutlist-qty.visible {
+        display: flex;
+      }
+    </style>
+    <!--
+      three.js is vendored locally (see vendor/three/) rather than loaded
+      from a CDN: an app must not fetch executable code from the network at
+      runtime (a hard requirement for F-Droid, and just good practice), so
+      everything the viewer runs has to ship inside the app itself.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/build/three.module.js",
+          "three/addons/": "./vendor/three/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="status">Loading model…</div>
+    <div id="viewer-controls-left">
+      <button id="camera-button" class="icon-button" type="button" aria-label="Choose camera"></button>
+      <button id="cut-list-toggle" class="icon-button" type="button" aria-label="Show cut list"></button>
+    </div>
+    <div id="viewer-controls-right">
+      <button id="short-measure-toggle" class="icon-button" type="button" aria-label="Toggle short-edge measurements"></button>
+      <button id="opacity-toggle" class="icon-button" type="button" aria-label="Toggle transparency"></button>
+    </div>
+    <div id="pick-list"></div>
+    <div id="cut-list-panel">
+      <div class="cutlist-header">
+        <div>
+          <div class="cutlist-title" id="cutlist-title">Cut list</div>
+          <div class="cutlist-progress" id="cutlist-progress"></div>
+        </div>
+        <button id="cutlist-close" class="icon-button small visible" type="button" aria-label="Close cut list"></button>
+      </div>
+      <div class="cutlist-items" id="cutlist-items"></div>
+    </div>
+    <script type="module" src="viewer.js"></script>
+  </body>
+</html>

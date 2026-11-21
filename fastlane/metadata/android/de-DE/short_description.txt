@@ -1,0 +1,1 @@
+Offline-3D-Betrachter für glTF/GLB mit Bauteilmaßen und Zuschnittliste

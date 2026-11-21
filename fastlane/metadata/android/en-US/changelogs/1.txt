@@ -1,0 +1,1 @@
+Initial release: browse a folder or open single .glb/.gltf files, 3D view with outlines, tap-to-select parts with measurements, see-through parts, embedded cameras, cut list with progress tracking, themes, English and German.
